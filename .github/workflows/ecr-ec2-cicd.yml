@@ -44,64 +44,67 @@ jobs:
     name: Deploy Docker Container to EC2
     runs-on: ubuntu-latest
     steps:
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh/
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/github-actions.pem
-          chmod 600 ~/.ssh/github-actions.pem
-      - name: Install and Start Docker on EC2
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/github-actions.pem $SSH_USER@$SSH_HOST "
-            # Check if Docker is installed
-            if ! command -v docker &> /dev/null; then
-              sudo apt-get update &&
-              sudo apt-get install -y docker.io &&
-              sudo systemctl start docker &&
-              sudo systemctl enable docker
-            else
-              echo 'Docker is already installed.'
-            # fi is used to end the if statement
-            fi
-          " || exit 1
-      - name: Install AWS CLI on EC2
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/github-actions.pem $SSH_USER@$SSH_HOST "
-            sudo apt-get update &&
-            # Install snapd
-            sudo apt-get install -y snapd &&
-            # Install AWS CLI
-            if ! command -v aws &> /dev/null; then
-              # sudo apt install awscli -y, does not work on Ubuntu 20.04        
-              sudo snap install aws-cli --classic;
-            else
-              echo 'AWS CLI is already installed';
-            fi
-            aws --version
-            " || exit 1
-      - name: Configure AWS Credentials on EC2
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/github-actions.pem $SSH_USER@$SSH_HOST "
-            # Configure AWS credentials
-            aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID &&
-            aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY &&
-            aws configure set region $AWS_REGION
-          " || exit 1
-      - name: Login to Amazon ECR on EC2
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/github-actions.pem $SSH_USER@$SSH_HOST "
-            # Get the password to login to ECR and login through Docker
-            aws ecr get-login-password --region $AWS_REGION | sudo docker login --username AWS --password-stdin $ECR_REGISTRY
-          " || exit 1
-      - name: Pull and Run Docker Image on EC2
-        run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/github-actions.pem $SSH_USER@$SSH_HOST "
-            # Stop and remove the container if it is already running
-            # Added || true to avoid the error if the container is not running
-            sudo docker stop docker-react-ecr || true &&
-            sudo docker rm docker-react-ecr || true &&
-            # Remove the image if it already exists
-            sudo docker rmi -f $ECR_REPOSITORY_URI &&
-            # Pull the image from ECR and run it
-            sudo docker pull $ECR_REPOSITORY_URI &&
-            sudo docker run --name docker-react-ecr -d -p 80:80 $ECR_REPOSITORY_URI
-          " || exit 1
+        - name: Install and Start Docker on EC2
+          uses: appleboy/ssh-action@v1.0.3
+          with:
+            host: ${{ secrets.SSH_HOST }}
+            username: ${{ secrets.SSH_USER }}
+            key: ${{ secrets.SSH_PRIVATE_KEY }}
+            script: |
+                if ! command -v docker &> /dev/null; then
+                    sudo apt-get update
+                    sudo apt-get install -y docker.io
+                    sudo systemctl start docker
+                    sudo systemctl enable docker
+                else
+                    echo "Docker is already installed."
+                fi
+
+        - name: Install AWS CLI on EC2
+          uses: appleboy/ssh-action@v1.0.3
+          with:
+            host: ${{ secrets.SSH_HOST }}
+            username: ${{ secrets.SSH_USER }}
+            key: ${{ secrets.SSH_PRIVATE_KEY }}
+            script: |
+                sudo apt-get update
+                sudo apt-get install -y snapd
+                if ! command -v aws &> /dev/null; then
+                    sudo snap install aws-cli --classic
+                else
+                    echo "AWS CLI is already installed."
+                fi
+                aws --version
+
+        - name: Configure AWS Credentials on EC2
+          uses: appleboy/ssh-action@v1.0.3
+          with:
+            host: ${{ secrets.SSH_HOST }}
+            username: ${{ secrets.SSH_USER }}
+            key: ${{ secrets.SSH_PRIVATE_KEY }}
+            script: |
+                aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+                aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                aws configure set region ${{ secrets.AWS_REGION }}
+
+        - name: Login to Amazon ECR on EC2
+          uses: appleboy/ssh-action@v1.0.3
+          with:
+            host: ${{ secrets.SSH_HOST }}
+            username: ${{ secrets.SSH_USER }}
+            key: ${{ secrets.SSH_PRIVATE_KEY }}
+            script: |
+                aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | sudo docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+        - name: Pull and Run Docker Image on EC2
+          uses: appleboy/ssh-action@v1.0.3
+          with:
+            host: ${{ secrets.SSH_HOST }}
+            username: ${{ secrets.SSH_USER }}
+            key: ${{ secrets.SSH_PRIVATE_KEY }}
+            script: |
+                sudo docker stop docker-react-ecr || true
+                sudo docker rm docker-react-ecr || true
+                sudo docker rmi -f ${{ secrets.ECR_REPOSITORY_URI }} || true
+                sudo docker pull ${{ secrets.ECR_REPOSITORY_URI }}
+                sudo docker run --name docker-react-ecr -d -p 80:80 ${{ secrets.ECR_REPOSITORY_URI }}
