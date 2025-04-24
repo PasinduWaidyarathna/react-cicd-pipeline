@@ -1,70 +1,135 @@
-# Getting Started with Create React App
+# CICD Pipeline with DockerHub and EC2
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This project demonstrates a complete CI/CD workflow for a React.js application using GitHub Actions. It includes multiple workflows:
+- **DockerHub + EC2 Deployment**
+- **ECR + EC2 Deployment**
+- **Unit Tests and Security Scans**
 
-## Available Scripts
+## Project Structure
 
-In the project directory, you can run:
+```
+.github/workflows/
+│
+├── dockerhub-ec2-cicd.yml          # CI/CD workflow for DockerHub & EC2
+├── ecr-ec2-cicd.yml                # CI/CD workflow for AWS ECR & EC2
+└── unit-tests-and-vulnerability-scans.yml # PR tests and security scans
 
-### `npm start`
+nginx/
+└── nginx.conf                      # Custom Nginx configuration
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+Dockerfile                          # Multi-stage Docker build
+src/                                # React source code
+public/                             # Static public assets
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+---
 
-### `npm test`
+## CI/CD Pipeline: DockerHub → EC2
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+**Trigger:** Manual (`workflow_dispatch`)
 
-### `npm run build`
+### Steps:
+1. **Build and Push Docker Image**
+   - Builds the app using `docker/build-push-action`
+   - Pushes image to DockerHub
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+2. **EC2 Deployment**
+   - SSH into the EC2 instance
+   - Installs Docker (if not present)
+   - Pulls image from DockerHub
+   - Runs the container on port 80
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+---
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## CI/CD Pipeline: ECR → EC2
 
-### `npm run eject`
+**Trigger:** On push to `main` or manual
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### Steps:
+1. **Build and Push Docker Image**
+   - Uses `aws-actions/configure-aws-credentials` and `docker/build-push-action`
+   - Pushes the Docker image to AWS ECR
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+2. **EC2 Deployment**
+   - Installs Docker and AWS CLI (if needed)
+   - Authenticates with ECR
+   - Pulls the latest image
+   - Runs the container
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+---
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## Unit Tests and Vulnerability Scans
 
-## Learn More
+**Trigger:** On PR to `main` or manual
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+### Steps:
+1. **Run Unit Tests**
+   - Executes tests using `npm test`
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+2. **File System Scan (Trivy)**
+   - Scans the repository's codebase for vulnerabilities
 
-### Code Splitting
+3. **Container Image Scan (Trivy)**
+   - Builds the Docker image
+   - Scans the image for vulnerabilities
+   - Uploads results to GitHub Security tab
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+---
 
-### Analyzing the Bundle Size
+## Dockerfile
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+Multi-stage build using Node.js and Nginx:
+```Dockerfile
+# Build Stage
+FROM node:16-alpine as build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . ./
+RUN npm run build
 
-### Making a Progressive Web App
+# Production Stage
+FROM nginx:stable-alpine
+COPY --from=build /app/build /usr/share/nginx/html
+COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+---
 
-### Advanced Configuration
+## Nginx Configuration
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+Supports SPA routing:
+```nginx
+server {
+    listen 80;
 
-### Deployment
+    location / {
+        root /usr/share/nginx/html;
+        index index.html index.htm;
+        try_files $uri $uri/ /index.html;
+    }
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-XSS-Protection "1; mode=block";
+    add_header X-Content-Type-Options "nosniff";
+}
+```
 
-### `npm run build` fails to minify
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## Secrets Required
+
+Set the following secrets in your GitHub repo:
+- `SSH_USER`, `SSH_HOST`, `SSH_PRIVATE_KEY`
+- `DOCKER_USERNAME`, `DOCKER_PASSWORD`
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `ECR_REPOSITORY_URI`, `ECR_REGISTRY`
+
+---
+
+## Contributing
+Feel free to submit issues, fork the repository, and send pull requests. Contributions are welcome!
+
+## Author
+- **Pasindu Waidyarathna**
