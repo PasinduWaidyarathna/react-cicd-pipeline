@@ -3,7 +3,7 @@
 }
 
 .App-logo {
-  height: 40vmin;
+  height: 20vmin;
   pointer-events: none;
 }
 
@@ -20,12 +20,43 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
+  font-size: calc(10px + 1.5vmin);
   color: white;
+  padding: 20px;
 }
 
 .App-link {
   color: #61dafb;
+}
+
+.counter-section {
+  margin: 20px 0;
+  padding: 15px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.counter-section button {
+  background-color: #61dafb;
+  color: #282c34;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.counter-section button:hover {
+  background-color: #4fa8d1;
+}
+
+.deployment-info {
+  margin-top: 30px;
+  padding: 15px;
+  background-color: rgba(97, 218, 251, 0.1);
+  border-radius: 8px;
+  font-size: 0.8em;
 }
 
 @keyframes App-logo-spin {
