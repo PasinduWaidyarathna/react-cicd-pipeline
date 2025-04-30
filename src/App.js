@@ -29,7 +29,7 @@ function App() {
         <img src={logo} className="App-logo" alt="logo" />
         <h1>Simple React App with CI/CD Pipeline</h1>
         <p>
-          This app demonstrates CI/CD with GitHub Actions, Docker, and AWS | Pasindu Waidyarathna
+          This app demonstrates CI/CD with GitHub Actions, Docker, and AWS | Pasindu Waidyarathna!
         </p>
         <div className="counter-section">
           <p>You clicked the button {count} times</p>
