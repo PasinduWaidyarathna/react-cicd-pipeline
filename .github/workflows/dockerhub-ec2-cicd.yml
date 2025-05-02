@@ -1,47 +1,51 @@
 name: CICD pipeline with DockerHub and EC2
 run-name: CICD pipeline with DockerHub and EC2
+
+# Trigger: manual dispatch only (you can uncomment “push” to trigger on commits to main)
 on:
   # push:
   #   branches:
   #     - main
   workflow_dispatch:
 
+# Environment variables pulled from GitHub Secrets for security    
 env:
-  SSH_USER: ${{secrets.SSH_USER}}
-  SSH_HOST: ${{secrets.SSH_HOST}}
-  SSH_PRIVATE_KEY: ${{secrets.SSH_PRIVATE_KEY}}
-  DOCKER_USERNAME: ${{secrets.DOCKER_USERNAME}}
-  DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
+  SSH_USER: ${{secrets.SSH_USER}}                # SSH username for EC2 login
+  SSH_HOST: ${{secrets.SSH_HOST}}                # EC2 host/IP
+  SSH_PRIVATE_KEY: ${{secrets.SSH_PRIVATE_KEY}}  # Private key to SSH into EC2
+  DOCKER_USERNAME: ${{secrets.DOCKER_USERNAME}}  # Docker Hub username
+  DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}  # Docker Hub password
+
 jobs:
   docker:
     name: Build and Push Docker Image to DockerHub
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Login to Docker Hub
+      - name: Checkout              # 1. Get repository code
+        uses: actions/checkout@v4   
+      - name: Login to Docker Hub   # 2. Authenticate against DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{env.DOCKER_USERNAME}} 
           password: ${{env.DOCKER_PASSWORD}}
-      - name: Build & Push the Docker Image
+      - name: Build & Push the Docker Image    # 3. Build Docker image and push “latest” tag
         uses: docker/build-push-action@v6
         with:
           push: true
           tags: pasindumw/docker-react:latest
   ec2:
-    needs: docker
+    needs: docker       # Wait until “docker” job completes successfully
     name: Deploy Docker Container to EC2
     runs-on: ubuntu-latest
     steps:
        - name: Deploy to EC2 using appleboy/ssh-action
-         uses: appleboy/ssh-action@v1.0.3
+         uses: appleboy/ssh-action@v1.0.3           # SSH into EC2 and run commands
          with:
            host: ${{ secrets.SSH_HOST }}
            username: ${{ secrets.SSH_USER }}
            key: ${{ secrets.SSH_PRIVATE_KEY }}
            script: |
-               # Install Docker if not already installed
+               # -- Install Docker if not already installed
                if ! command -v docker &> /dev/null; then
                   sudo apt-get update &&
                   sudo apt-get install -y docker.io &&
@@ -49,13 +53,17 @@ jobs:
                   sudo systemctl enable docker
                fi
 
-               # Login to Docker Hub
+               # -- Login to Docker Hub
                echo ${{ secrets.DOCKER_PASSWORD }} | sudo docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
 
-               # Stop, remove, pull and run the container
+               # -- Gracefully stop & remove old container (ignore errors)
                sudo docker stop docker-react || true
                sudo docker rm docker-react || true
+
+                # -- Pull the newly built image
                sudo docker pull pasindumw/docker-react:latest
+
+               # -- Run the container in detached mode, mapping port 80
                sudo docker run -d --name docker-react -p 80:80 pasindumw/docker-react:latest
 
 
