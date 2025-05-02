@@ -81,7 +81,7 @@ public/                             # Static public assets
 Multi-stage build using Node.js and Nginx:
 ```Dockerfile
 # Build Stage
-FROM node:16-alpine as build
+FROM node:18-alpine as build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
